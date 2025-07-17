@@ -1170,13 +1170,10 @@ class AIAnalyzer:
         # 构建上下文信息
         context_info = self._build_response_context(analysis_data, user_message, intent_analysis)
         
-        # 根据意图类型生成不同的回复
-        if intent_type == 'clarification':
-            return self._generate_clarification_response(user_message, context_info, analysis_data)
-        elif intent_type == 'specific_info_query':
-            return self._generate_specific_info_response(user_message, context_info, analysis_data)
-        else:
-            return self._generate_general_response(user_message, context_info, analysis_data)
+        # 生成综合性的详细回复
+        response = self._generate_comprehensive_chat_response(user_message, context_info, analysis_data, intent_type)
+        
+        return response
 
     def _build_response_context(self, analysis_data: Dict, user_message: str, intent_analysis: Dict) -> Dict:
         """构建回复的上下文信息"""
@@ -1214,6 +1211,63 @@ class AIAnalyzer:
         content_lower = content.lower()
         matches = sum(1 for keyword in keywords if keyword.lower() in content_lower)
         return matches / len(keywords)
+
+    def _generate_comprehensive_chat_response(self, user_message: str, context_info: Dict, 
+                                            analysis_data: Dict, intent_type: str) -> str:
+        """生成综合性的详细聊天回复"""
+        
+        response = ""
+        relevant_sections = context_info['relevant_sections']
+        summary = context_info['summary']
+        recommendations = context_info['recommendations']
+        extracted_data = context_info['extracted_data']
+        
+        # 1. 开场白 - 直接回应用户问题
+        response += f"根据文档分析结果，关于您的问题\"{user_message}\"，我为您整理了以下详细信息：\n\n"
+        
+        # 2. 核心要点 - 基于分析概要
+        if summary:
+            response += "**📋 核心要点**\n"
+            response += f"{summary}\n\n"
+        
+        # 3. 详细分析 - 基于相关章节
+        if relevant_sections:
+            response += "**📖 详细分析**\n"
+            for i, section in enumerate(relevant_sections[:3], 1):
+                section_content = section['content']
+                # 限制内容长度，避免过长
+                if len(section_content) > 500:
+                    section_content = section_content[:500] + "..."
+                response += f"{i}. **{section['section']}**\n{section_content}\n\n"
+        
+        # 4. 关键数据 - 如果有提取的具体数据
+        if extracted_data:
+            response += "**📊 关键数据**\n"
+            for key, value in extracted_data.items():
+                if isinstance(value, list):
+                    response += f"• **{key}**：\n"
+                    for item in value[:3]:
+                        response += f"  - {item}\n"
+                else:
+                    response += f"• **{key}**：{value}\n"
+            response += "\n"
+        
+        # 5. 实用建议 - 基于分析结果
+        if recommendations:
+            response += "**💡 实用建议**\n"
+            for i, rec in enumerate(recommendations[:3], 1):
+                response += f"{i}. {rec}\n"
+            response += "\n"
+        
+        # 6. 补充说明 - 根据意图类型添加
+        if intent_type == 'clarification':
+            response += "如果您需要更详细的解释或有其他疑问，请随时告诉我。"
+        elif intent_type == 'specific_info_query':
+            response += "以上是文档中关于您查询内容的具体信息。如需了解更多细节，请提出更具体的问题。"
+        else:
+            response += "基于当前的分析结果，我已经为您提供了最相关的信息。如果您需要了解其他方面或需要更深入的分析，请告诉我。"
+        
+        return response
 
     def _generate_clarification_response(self, user_message: str, context_info: Dict, analysis_data: Dict) -> str:
         """生成澄清类回复"""
@@ -1378,24 +1432,39 @@ class AIAnalyzer:
 分析任务：
 请仔细阅读所有提取的内容，针对用户的具体需求进行深度分析，从内容中提取关键信息和数据，并提供实用的建议和总结。
 
+**重要要求：**
+1. 分析必须深入且详细，不要简单概括
+2. 从提取的内容中挖掘具体的数据、金额、时间、要求等关键信息
+3. 提供多个维度的分析视角
+4. 给出具体可行的建议
+5. 确保分析结果对用户有实际价值
+
 请在你的回复中包含分析结果，使用特殊标记包围：
 
 <ANALYSIS_RESULT>
 {{
-    "summary": "针对用户需求的核心分析总结，直接回答用户关心的问题",
+    "summary": "针对用户需求的核心分析总结，直接回答用户关心的问题，包含具体的数据和关键信息",
     "detailed_analysis": {{
-        "关键要点1": "基于提取内容的具体分析",
-        "关键要点2": "基于提取内容的具体分析",
-        "关键要点3": "基于提取内容的具体分析"
+        "项目概况": "详细分析项目的基本信息、规模、重要性等",
+        "技术要求": "分析技术规格、参数要求、质量标准等",
+        "商务条件": "分析合同条款、付款方式、交付要求等",
+        "风险分析": "识别潜在风险和注意事项",
+        "市场分析": "分析市场环境、竞争情况、机会等",
+        "实施建议": "提供具体的实施建议和策略"
     }},
     "recommendations": [
-        "基于分析结果的实用建议1",
-        "基于分析结果的实用建议2", 
-        "基于分析结果的实用建议3"
+        "基于分析结果的具体建议1（包含可操作的建议）",
+        "基于分析结果的具体建议2（包含可操作的建议）", 
+        "基于分析结果的具体建议3（包含可操作的建议）",
+        "基于分析结果的具体建议4（包含可操作的建议）"
     ],
     "extracted_data": {{
-        "关键数据1": "从内容中提取的具体值",
-        "关键数据2": "从内容中提取的具体值"
+        "项目金额": "从内容中提取的具体金额",
+        "项目周期": "从内容中提取的时间要求",
+        "技术要求": "从内容中提取的具体技术参数",
+        "资格要求": "从内容中提取的供应商资格条件",
+        "关键日期": "从内容中提取的重要时间节点",
+        "特殊要求": "从内容中提取的特殊条件或要求"
     }},
     "confidence_score": 数字（0.0-1.0之间，表示分析的可信度）
 }}
@@ -1405,12 +1474,12 @@ class AIAnalyzer:
 - 分析必须完全基于提取的内容，不要凭空推测
 - 直接回答用户的需求，避免空洞的总结
 - 提取的数据要准确，包括金额、时间、要求等
-- 建议要实用且针对性强
+- 建议要实用且针对性强，包含具体的操作指导
 - 确保JSON格式正确
-- 你可以在标记前后添加解释性文字，但核心分析结果必须在标记内
+- 分析要深入，不要停留在表面描述
 
 示例回复格式：
-根据你的需求，我已经分析了相关文档内容。以下是详细的分析结果：
+根据你的需求，我已经深入分析了相关文档内容。以下是详细的分析结果：
 
 <ANALYSIS_RESULT>
 {{合规的JSON分析结果}}
@@ -1450,7 +1519,11 @@ class AIAnalyzer:
                     {"role": "system", "content": "你是一个专业的文档分析助手。"},
                     {"role": "user", "content": prompt}
                 ],
-                "temperature": 0.3
+                "temperature": 0.3,
+                "max_tokens": 4000,  # 增加token限制，确保AI能够生成详细回复
+                "top_p": 0.9,
+                "frequency_penalty": 0.1,
+                "presence_penalty": 0.1
             }
             
             url = f"{self.base_url}/chat/completions"

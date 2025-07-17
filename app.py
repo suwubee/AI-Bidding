@@ -1274,10 +1274,49 @@ def ai_reanalyze():
             ]
         }
         
+        # 保存更新后的分析结果
+        save_analysis_result(user_id, conversation_id, {
+            'user_request': new_request,
+            'filename': filename,
+            'analysis_result': result['analysis_result'],
+            'extracted_contents': result['extracted_contents'],
+            'extraction_targets': [target.__dict__ for target in extraction_targets],
+            'steps_log': []
+        })
+        
+        # 生成AI的详细回复
+        ai_response = analyzer._generate_comprehensive_chat_response(
+            new_request, 
+            analyzer._build_response_context(result['analysis_result'], new_request, {'intent_type': 'request_more_extraction', 'keywords': []}),
+            result['analysis_result'],
+            'request_more_extraction'
+        )
+        
+        # 更新聊天记录
+        chat_history = load_chat_history(user_id, conversation_id)
+        if not chat_history:
+            chat_history = {
+                'conversation_id': conversation_id,
+                'messages': [],
+                'last_updated': time.time()
+            }
+        
+        # 添加AI的详细回复到聊天记录
+        chat_history['messages'].append({
+            'role': 'assistant',
+            'content': ai_response,
+            'timestamp': time.time(),
+            'need_extraction': False
+        })
+        
+        chat_history['last_updated'] = time.time()
+        save_chat_history(user_id, conversation_id, chat_history['messages'])
+        
         return jsonify({
             'success': True,
             'data': result,
-            'new_request': new_request
+            'new_request': new_request,
+            'ai_response': ai_response
         })
         
     except Exception as e:

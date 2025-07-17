@@ -45,10 +45,26 @@ class AIAnalysisManager {
             });
         }
         
-        // AI配置保存
-        const saveConfigBtn = document.getElementById('saveAiConfigBtn');
-        if (saveConfigBtn) {
-            saveConfigBtn.addEventListener('click', () => this.saveAiConfig());
+        // AI配置自动保存
+        if (this.apiKeyInput) {
+            this.apiKeyInput.addEventListener('input', () => this.saveAiConfig());
+            this.apiKeyInput.addEventListener('blur', () => this.saveAiConfig());
+        }
+        
+        if (this.baseUrlInput) {
+            this.baseUrlInput.addEventListener('input', () => this.saveAiConfig());
+            this.baseUrlInput.addEventListener('blur', () => this.saveAiConfig());
+        }
+        
+        // 清除缓存按钮
+        const clearCacheBtn = document.getElementById('clearCacheBtn');
+        if (clearCacheBtn) {
+            clearCacheBtn.addEventListener('click', () => {
+                if (confirm('确定要清除所有缓存数据吗？这将清空API Key、Base URL和分析请求。')) {
+                    this.clearCache();
+                    this.updateCacheStatus();
+                }
+            });
         }
         
         // 监听文件选择变化
@@ -57,10 +73,14 @@ class AIAnalysisManager {
             filesDropdown.addEventListener('change', () => this.onFileSelectionChanged());
         }
         
-        // 监听AI分析输入框变化，实时更新按钮状态
+        // 监听AI分析输入框变化，实时更新按钮状态并自动保存
         if (this.aiRequestInput) {
-            this.aiRequestInput.addEventListener('input', () => this.updateAnalysisButtonState());
+            this.aiRequestInput.addEventListener('input', () => {
+                this.updateAnalysisButtonState();
+                this.saveAiConfig(); // 自动保存
+            });
             this.aiRequestInput.addEventListener('keyup', () => this.updateAnalysisButtonState());
+            this.aiRequestInput.addEventListener('blur', () => this.saveAiConfig()); // 失去焦点时保存
         }
         
         // 监听文件选择变化，更新按钮状态
@@ -248,11 +268,70 @@ class AIAnalysisManager {
         this.resetAnalysisState();
     }
 
+    clearCache() {
+        // 清除浏览器缓存
+        try {
+            localStorage.removeItem('ai_api_key');
+            localStorage.removeItem('ai_base_url');
+            localStorage.removeItem('ai_last_request');
+            
+            // 清空输入框
+            if (this.apiKeyInput) this.apiKeyInput.value = '';
+            if (this.baseUrlInput) this.baseUrlInput.value = 'https://apistudy.mycache.cn/v1';
+            if (this.aiRequestInput) this.aiRequestInput.value = '';
+            
+            console.log('缓存已清除');
+        } catch (error) {
+            console.warn('清除缓存失败:', error);
+        }
+    }
+
+    getCacheInfo() {
+        // 获取缓存信息
+        try {
+            return {
+                hasApiKey: !!localStorage.getItem('ai_api_key'),
+                hasBaseUrl: !!localStorage.getItem('ai_base_url'),
+                hasLastRequest: !!localStorage.getItem('ai_last_request'),
+                cacheSize: JSON.stringify(localStorage).length
+            };
+        } catch (error) {
+            console.warn('获取缓存信息失败:', error);
+            return null;
+        }
+    }
+
+    updateCacheStatus() {
+        // 更新缓存状态显示
+        try {
+            const cacheInfo = this.getCacheInfo();
+            const cacheStatus = document.getElementById('cacheStatus');
+            
+            if (cacheStatus && cacheInfo) {
+                const savedItems = [];
+                if (cacheInfo.hasApiKey) savedItems.push('API Key');
+                if (cacheInfo.hasBaseUrl) savedItems.push('Base URL');
+                if (cacheInfo.hasLastRequest) savedItems.push('分析请求');
+                
+                if (savedItems.length > 0) {
+                    cacheStatus.textContent = `已保存: ${savedItems.join(', ')}`;
+                    cacheStatus.className = 'text-success';
+                } else {
+                    cacheStatus.textContent = '配置将自动保存到浏览器';
+                    cacheStatus.className = 'text-info';
+                }
+            }
+        } catch (error) {
+            console.warn('更新缓存状态失败:', error);
+        }
+    }
+
     loadAiConfig() {
         // 从localStorage加载AI配置
         try {
             const savedApiKey = localStorage.getItem('ai_api_key');
             const savedBaseUrl = localStorage.getItem('ai_base_url');
+            const savedLastRequest = localStorage.getItem('ai_last_request');
             
             if (savedApiKey && this.apiKeyInput) {
                 this.apiKeyInput.value = savedApiKey;
@@ -264,6 +343,13 @@ class AIAnalysisManager {
                 // 如果没有保存的配置且当前为空，设置默认值
                 this.baseUrlInput.value = 'https://apistudy.mycache.cn/v1';
             }
+            
+            if (savedLastRequest && this.aiRequestInput) {
+                this.aiRequestInput.value = savedLastRequest;
+            }
+            
+            // 更新缓存状态显示
+            this.updateCacheStatus();
             
             console.log('AI配置已从缓存加载');
         } catch (error) {
@@ -281,6 +367,14 @@ class AIAnalysisManager {
             if (this.baseUrlInput) {
                 localStorage.setItem('ai_base_url', this.baseUrlInput.value);
             }
+            
+            // 保存当前分析请求
+            if (this.aiRequestInput) {
+                localStorage.setItem('ai_last_request', this.aiRequestInput.value);
+            }
+            
+            // 更新缓存状态显示
+            this.updateCacheStatus();
             
             console.log('AI配置已保存到缓存');
         } catch (error) {
@@ -795,10 +889,27 @@ class AIAnalysisManager {
         const messageTime = timestamp || new Date();
         const timeString = messageTime.toLocaleTimeString();
         
+        // 渲染Markdown内容
+        let renderedContent = content;
+        if (sender === 'ai' && typeof marked !== 'undefined') {
+            try {
+                // 配置Markdown渲染选项
+                marked.setOptions({
+                    breaks: true,  // 支持换行
+                    gfm: true,     // 支持GitHub风格Markdown
+                    sanitize: false // 允许HTML标签
+                });
+                renderedContent = marked.parse(content);
+            } catch (error) {
+                console.warn('Markdown渲染失败，使用原始内容:', error);
+                renderedContent = content;
+            }
+        }
+        
         const messageDiv = document.createElement('div');
         messageDiv.className = `chat-message ${sender}`;
         messageDiv.innerHTML = `
-            <div class="chat-message-content">${content}</div>
+            <div class="chat-message-content">${renderedContent}</div>
             <div class="chat-message-time">${timeString}</div>
         `;
         
@@ -830,9 +941,8 @@ class AIAnalysisManager {
     }
 
     handleNewExtractionRequest(newRequest) {
-        // 显示加载状态
-        const loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'));
-        loadingModal.show();
+        // 不显示加载弹窗，直接在聊天中显示处理状态
+        this.addChatMessage('ai', '我正在根据您的新需求重新分析文档，请稍候...');
         
         const filesDropdown = document.getElementById('filesDropdown');
         const apiKeyInput = document.getElementById('apiKeyInput');
@@ -855,21 +965,28 @@ class AIAnalysisManager {
                 base_url: baseUrl
             })
         })
-        .then(response => {
-            forceCloseModal();
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
             if (data.success) {
                 // 更新分析结果
                 this.updateAnalysisResults(data.data);
-                this.addChatMessage('ai', `我已经根据您的新需求重新分析了文档。请查看上方更新的分析结果。`);
+                
+                // 显示AI的详细回复
+                if (data.ai_response) {
+                    // 移除之前的"正在分析"消息
+                    const chatMessages = document.getElementById('chatMessages');
+                    const lastMessage = chatMessages.lastElementChild;
+                    if (lastMessage && lastMessage.classList.contains('ai')) {
+                        lastMessage.remove();
+                    }
+                    
+                    this.addChatMessage('ai', data.ai_response);
+                }
             } else {
                 this.addChatMessage('ai', `重新分析时遇到问题：${data.error}`);
             }
         })
         .catch(error => {
-            forceCloseModal();
             console.error('重新分析失败:', error);
             this.addChatMessage('ai', '重新分析失败，请稍后再试。');
         });
